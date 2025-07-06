@@ -1,0 +1,105 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Public Restroom Locator</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body, html { margin: 0; height: 100%; font-family: sans-serif; }
+    #map { height: 60%; }
+    #sidebar { height: 40%; overflow-y: auto; padding: 10px; }
+    .filter-group { margin: 10px 0; }
+    .restroom-item { border-bottom: 1px solid #ccc; padding: 6px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="sidebar">
+    <input id="searchInput" type="text" placeholder="Search location..." />
+    <button onclick="searchLocation()">Search</button>
+    <div class="filter-group">
+      <label><input type="checkbox" id="accessibleFilter" /> Accessible</label>
+      <label><input type="checkbox" id="unisexFilter" /> Gender Neutral</label>
+      <select id="sortSelect">
+        <option value="distance">Sort by Distance</option>
+        <option value="name">Sort by Name</option>
+      </select>
+    </div>
+    <div id="restroomList"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map = L.map('map').setView([9.03, 38.74], 13);
+    let markers = [];
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2-lat1)*Math.PI/180;
+      const dLon = (lon2-lon1)*Math.PI/180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    async function fetchRestrooms(lat, lng) {
+      const res = await fetch(`https://www.refugerestrooms.org/api/v1/restrooms/by_location?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+      const accessible = document.getElementById('accessibleFilter').checked;
+      const unisex = document.getElementById('unisexFilter').checked;
+      let filtered = data.filter(r => {
+        if (accessible && !r.accessible) return false;
+        if (unisex && !r.unisex) return false;
+        return true;
+      });
+
+      filtered.forEach(r => {
+        r.distance = getDistance(lat, lng, r.latitude, r.longitude);
+      });
+
+      const sortBy = document.getElementById('sortSelect').value;
+      if (sortBy === 'distance') {
+        filtered.sort((a, b) => a.distance - b.distance);
+      } else {
+        filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      }
+
+      document.getElementById('restroomList').innerHTML = "";
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      filtered.forEach(r => {
+        const item = document.createElement("div");
+        item.className = "restroom-item";
+        item.innerHTML = `<strong>${r.name}</strong><br/>${r.street || ''}<br/>${r.distance.toFixed(2)} km`;
+        document.getElementById('restroomList').appendChild(item);
+        const marker = L.marker([r.latitude, r.longitude]).addTo(map).bindPopup(r.name || "Restroom");
+        markers.push(marker);
+      });
+    }
+
+    function searchLocation() {
+      const query = document.getElementById('searchInput').value;
+      const apiKey = "YOUR_OPENCAGE_API_KEY"; // Replace this with your API key
+      fetch(`https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${apiKey}`)
+        .then(res => res.json())
+        .then(data => {
+          const loc = data.results[0].geometry;
+          map.setView([loc.lat, loc.lng], 14);
+          fetchRestrooms(loc.lat, loc.lng);
+        });
+    }
+
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      map.setView([latitude, longitude], 14);
+      fetchRestrooms(latitude, longitude);
+    }, () => fetchRestrooms(9.03, 38.74));
+  </script>
+</body>
+</html>
