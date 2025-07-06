@@ -85,7 +85,7 @@
 
     function searchLocation() {
       const query = document.getElementById('searchInput').value;
-      const apiKey = "YOUR_OPENCAGE_API_KEY"; // Replace this with your API key
+      const apiKey = "24f59e50925843c8936bcf362ee1dcff; // Replace this with your API key
       fetch(`https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${apiKey}`)
         .then(res => res.json())
         .then(data => {
